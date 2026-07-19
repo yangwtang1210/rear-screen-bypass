@@ -45,7 +45,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             for (Method m : centerMgr.getDeclaredMethods()) {
                 log("  M> " + m.getName() + "(" + typesStr(m) + ")");
             }
-            hookSafe(centerMgr, "p", "CenterManager.p");
+            hookSafe("com.rearScreen.manager.RearScreenCenterManager", cl, "p", "CenterManager.p");
         } else {
             log("[TM] !! RearScreenCenterManager NOT FOUND");
         }
@@ -67,7 +67,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             for (Method m : resHelperComp.getDeclaredMethods()) {
                 log("  M> " + m.getName() + "(" + typesStr(m) + ")");
             }
-            hookSafe(resHelperComp, "k", "ResHelper.Companion.k");
+            hookSafe("com.rearScreen.manager.RearScreenResOperationHelper$Companion", cl, "k", "ResHelper.Companion.k");
         }
 
         // --- 3. 扫描 RearScreenDetailFragment ---
@@ -77,7 +77,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             for (Method m : detailFrag.getDeclaredMethods()) {
                 log("  M> " + m.getName() + "(" + typesStr(m) + ")");
             }
-            hookSafe(detailFrag, "showWallpaperPreview", "DetailFragment.showWallpaperPreview");
+            hookSafe("com.rearScreen.fragment.RearScreenDetailFragment", cl, "showWallpaperPreview", "DetailFragment.showWallpaperPreview");
         }
 
         // --- 4. 扫描 RearScreenToolService ---
@@ -87,7 +87,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             for (Method m : toolSvc.getDeclaredMethods()) {
                 log("  M> " + m.getName() + "(" + typesStr(m) + ")");
             }
-            hookSafe(toolSvc, "startRearWidgetApply", "ToolService.startRearWidgetApply");
+            hookSafe("com.rearScreen.miclaw.RearScreenToolService", cl, "startRearWidgetApply", "ToolService.startRearWidgetApply");
         }
 
         // --- 5. 扫描 ResourceRightsHelper ---
@@ -97,7 +97,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             for (Method m : rightsHelper.getDeclaredMethods()) {
                 log("  M> " + m.getName() + "(" + typesStr(m) + ")");
             }
-            hookSafe(rightsHelper, "makeDataReady", "RightsHelper.makeDataReady");
+            hookSafe("com.android.thememanager.common.util.ResourceRightsHelper", cl, "makeDataReady", "RightsHelper.makeDataReady");
         } else {
             log("[TM] !! ResourceRightsHelper NOT FOUND");
         }
@@ -109,7 +109,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             for (Method m : runtime.getDeclaredMethods()) {
                 log("  M> " + m.getName() + "(" + typesStr(m) + ")");
             }
-            hookSafe(runtime, "getWhiteRunTimePath", "ThemeRuntime.getWhiteRunTimePath");
+            hookSafe("miui.theme.manager.ThemeRuntime", cl, "getWhiteRunTimePath", "ThemeRuntime.getWhiteRunTimePath");
         } else {
             log("[TM] !! ThemeRuntime NOT FOUND");
         }
@@ -124,7 +124,6 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
     private void hookSubScreenCenter(ClassLoader cl) {
         log("[SS] Scanning SubScreenCenter...");
 
-        // 尝试 hook 已知 obfuscated 类
         String[][] targets = {
                 {"m2.a", "d"},
                 {"Z1.g", "test"},
@@ -137,7 +136,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
                 for (Method m : cls.getDeclaredMethods()) {
                     log("  M> " + m.getName() + "(" + typesStr(m) + ")");
                 }
-                hookSafe(cls, t[1], t[0] + "." + t[1]);
+                hookSafe(t[0], cl, t[1], t[0] + "." + t[1]);
             } else {
                 log("[SS] !! " + t[0] + " NOT FOUND");
             }
@@ -176,31 +175,21 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
     }
 
     /**
-     * 使用反射找 Method 再用 XposedBridge.hookMethod 避免编译器重载歧义
+     * 用字符串类名调用 findAndHookMethod 避免编译器重载歧义
      */
-    private static void hookSafe(Class<?> clazz, String methodName, String desc) {
+    private static void hookSafe(String className, ClassLoader cl, String methodName, String desc) {
         try {
-            Method target = null;
-            for (Method m : clazz.getDeclaredMethods()) {
-                if (m.getName().equals(methodName)) {
-                    target = m;
-                    break;
-                }
-            }
-            if (target == null) {
-                log("[HOOK] " + desc + " => FAIL: method not found in class");
-                return;
-            }
-            XposedBridge.hookMethod(target, new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    log("[HOOK] >>> " + desc + " invoked! <<<");
-                }
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    log("[HOOK] <<< " + desc + " returned <<<");
-                }
-            });
+            XposedHelpers.findAndHookMethod(className, cl, methodName,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            log("[HOOK] >>> " + desc + " invoked! <<<");
+                        }
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            log("[HOOK] <<< " + desc + " returned <<<");
+                        }
+                    });
             log("[HOOK] " + desc + " => OK");
         } catch (Throwable t) {
             log("[HOOK] " + desc + " => FAIL: " + t.getMessage());
