@@ -2,20 +2,10 @@ package com.codex.rearscreenfix;
 
 import android.content.ContentValues;
 import android.net.Uri;
-import android.os.Bundle;
 import android.util.Log;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -110,9 +100,6 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             hookSafe(rightsHelper, "makeDataReady", "RightsHelper.makeDataReady");
         } else {
             log("[TM] !! ResourceRightsHelper NOT FOUND");
-            // 搜索 Rights 相关类
-            scanKeyword(cl, "Rights", "Resource");
-            scanKeyword(cl, "makeDataReady");
         }
 
         // --- 6. 扫描 ThemeRuntime ---
@@ -127,10 +114,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
             log("[TM] !! ThemeRuntime NOT FOUND");
         }
 
-        // --- 7. 扫描 RearScreenRes ---
-        scanKeyword(cl, "RearScreenRes", "apply", "install", "wallpaper");
-
-        // --- 8. hook ContentResolver insert/update (wallpaper 写入) ---
+        // --- 7. hook ContentResolver insert (wallpaper 写入) ---
         hookCR(cl);
 
         log("[TM] === ThemeManager scan done ===");
@@ -139,9 +123,6 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
     // ========== SubScreenCenter ==========
     private void hookSubScreenCenter(ClassLoader cl) {
         log("[SS] Scanning SubScreenCenter...");
-
-        // 先扫描含关键字段的类
-        scanKeyword(cl, "subscreen", "SubScreen", "rear", "Rear", "wallpaper", "Wallpaper", "apply", "install", "widget");
 
         // 尝试 hook 已知 obfuscated 类
         String[][] targets = {
@@ -185,13 +166,7 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
         }
     }
 
-    // ========== 诊断工具 ==========
-    private static void scanKeyword(ClassLoader cl, String... keywords) {
-        log("[SCAN] Looking for classes with keywords: " + Arrays.toString(keywords));
-        // 简单扫描: 通过 DexPathList 尝试加载已知包名
-        // 更详细的结果需要 logcat 查看 XposedBridge 日志
-    }
-
+    // ========== 工具方法 ==========
     private static Class<?> findClass(String name, ClassLoader cl) {
         try {
             return XposedHelpers.findClass(name, cl);
@@ -200,9 +175,23 @@ public class RearScreenBypass implements IXposedHookLoadPackage {
         }
     }
 
-    private static void hookSafe(Class<?> clazz, String method, String desc) {
+    /**
+     * 使用反射找 Method 再用 XposedBridge.hookMethod 避免编译器重载歧义
+     */
+    private static void hookSafe(Class<?> clazz, String methodName, String desc) {
         try {
-            XposedHelpers.findAndHookMethod(clazz, method, new XC_MethodHook() {
+            Method target = null;
+            for (Method m : clazz.getDeclaredMethods()) {
+                if (m.getName().equals(methodName)) {
+                    target = m;
+                    break;
+                }
+            }
+            if (target == null) {
+                log("[HOOK] " + desc + " => FAIL: method not found in class");
+                return;
+            }
+            XposedBridge.hookMethod(target, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     log("[HOOK] >>> " + desc + " invoked! <<<");
